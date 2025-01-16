@@ -9,6 +9,6 @@ if [ -n "${POSTGRES_NON_ROOT_USER:-}" ] && [ -n "${POSTGRES_NON_ROOT_PASSWORD:-}
 		GRANT CREATE ON SCHEMA public TO ${POSTGRES_NON_ROOT_USER};
 	EOSQL
 else
-	echo "SETUP INFO: No Environment variables WAS given!"	
+	echo "SETUP INFO: No Environment variables given!"	
 	exit 1
 fi

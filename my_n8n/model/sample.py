@@ -92,12 +92,12 @@ if __name__ == "__main__":
 
     ## Update
     #  Direct update without instantiation
-    # updated_id = TestModel.update_record(
-    #     id=26,
-    #     name='John Ruff',
-    #     age=32
-    # )
-    # print("Updated record:\n", updated_id, "\n")
+    updated_id = TestModel.update_record(
+        id=26,
+        name='John Ruff',
+        age=32
+    )
+    print("Updated record:\n", updated_id, "\n")
 
 
     # Delete

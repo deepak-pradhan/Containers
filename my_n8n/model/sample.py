@@ -88,16 +88,16 @@ if __name__ == "__main__":
    
     # Read all records
     all_records = TestModel.get_all_records()
-    # print("All records:\n", all_records, "\n")  
+    print("All records:\n", all_records, "\n")  
 
     ## Update
     #  Direct update without instantiation
-    updated_id = TestModel.update_record(
-        id=26,
-        name='John Ruff',
-        age=32
-    )
-    print("Updated record:\n", updated_id, "\n")
+    # updated_id = TestModel.update_record(
+    #     id=26,
+    #     name='John Ruff',
+    #     age=32
+    # )
+    # print("Updated record:\n", updated_id, "\n")
 
 
     # Delete

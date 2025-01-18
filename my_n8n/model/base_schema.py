@@ -101,8 +101,8 @@ class BaseSchema(BaseModel):
         print(result)
         if result:
             record_dict = {}
-            for _, col in enumerate(cls.table_columns):
-                record_dict[col] = result[col]
+            for i, col in enumerate(cls.table_columns):
+                record_dict[col] = result[i]
             return record_dict
         return None
 
@@ -121,8 +121,8 @@ class BaseSchema(BaseModel):
         dict_records = []
         for record in results:
             record_dict = {}
-            for _, col in enumerate(cls.table_columns):
-                record_dict[col] = record[col]
+            for i, col in enumerate(cls.table_columns):
+                record_dict[col] = record[i]
             dict_records.append(record_dict)
         
         return dict_records
@@ -152,7 +152,7 @@ class BaseSchema(BaseModel):
         if result:
             record_dict = {}
             for i, col in enumerate(cls.table_columns):
-                record_dict[col] = result[col]
+                record_dict[col] = result[i]
             return record_dict
         return None
 

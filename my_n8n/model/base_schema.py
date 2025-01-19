@@ -1,30 +1,28 @@
-# file: my_n8n/model/base_schema.py
-
 from datetime import datetime, timezone
-from typing import TypeVar, ClassVar, Optional
+from typing import TypeVar, ClassVar, Optional, Any
 import psycopg
-from pydantic import BaseModel, Field, field_validator
-from rich import print
+from pydantic import BaseModel, Field
+
 from my_n8n.connection.db_my_n8n import get_db_connection
 
-T = TypeVar('T', bound='BaseSchema')
+T = TypeVar("T", bound="BaseSchema")
+
+
 class BaseSchema(BaseModel):
-
     conn: ClassVar[psycopg.Connection] = get_db_connection()
-    cursor: ClassVar[psycopg.Cursor] = conn.cursor()
-    table_name: ClassVar[str] = None  # Define default directly
-    table_columns: ClassVar[tuple[str, ...]] = ()  # Use an immutable tuple
+    table_name: ClassVar[str] = None  # Must be set in subclasses
+    table_columns: ClassVar[tuple[str, ...]] = ()  # Define columns in subclasses
 
-    type: str | None = Field(default=None, description="Type of the record/object")
+    type: Optional[str] = Field(default=None, description="Type of the record/object")
     is_active: bool = True
-    created_by: str = Field(default=None, description="User who created this record")
-    updated_by: str = Field(default=None, description="User who last updated this record")
+    created_by: Optional[str] = Field(default=None, description="User who created this record")
+    updated_by: Optional[str] = Field(default=None, description="User who last updated this record")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {
-        "extra": "ignore", 
-        "populate_by_name": True,  
+        "extra": "ignore",
+        "populate_by_name": True,
         "validate_assignment": True,
         "json_schema_extra": {
             "examples": [
@@ -33,161 +31,80 @@ class BaseSchema(BaseModel):
                     "name": "John Doe",
                     "created_at": "2023-01-01T00:00:00",
                     "updated_at": "2023-01-01T00:00:00",
-                    "is_active": True
+                    "is_active": True,
                 }
-        ]}}
+            ]
+        },
+    }
 
-    @field_validator('updated_at', mode="before")
-    def set_updated_at(cls, value):
-        return datetime.now(timezone.utc)
-    
-    # Private Methods
-    def _create(self):
-        """Internal method that handles the database insert"""
-        query = f"""\
-            INSERT INTO {self.table_name} 
-                   ({', '.join(self.table_columns)}) 
-            VALUES ({', '.join(['%s'] * len(self.table_columns))})
+    @classmethod
+    def execute_query(cls, query: str, params: tuple = (), fetch: Optional[str] = "one"):
+        """Helper method to execute a query and fetch results."""
+        with cls.conn.cursor() as cursor:
+            cursor.execute(query, params)
+            cls.conn.commit()
+            if fetch == "one":
+                return cursor.fetchone()
+            elif fetch == "all":
+                return cursor.fetchall()
+            return None  # For operations like DELETE or UPDATE
+
+    @classmethod
+    def transform_record(cls, record: tuple) -> dict:
+        """Convert a database record tuple to a dictionary."""
+        return {col: record[i] for i, col in enumerate(cls.table_columns)} if record else None
+
+    @classmethod
+    def create_record(cls, **kwargs) -> Optional[dict]:
+        """Insert a new record and return it."""
+        query = f"""
+            INSERT INTO {cls.table_name} ({', '.join(cls.table_columns)})
+            VALUES ({', '.join(['%s'] * len(cls.table_columns))})
             RETURNING *"""
-        values = [getattr(self, column) for column in self.table_columns]
-        
-        self.cursor.execute(query, values)
-        result = self.cursor.fetchone()
-        self.conn.commit()
-        return result    
-    def _fetch(self, id: int):
-        """Fetch a record by id"""
-        result = self.cursor.execute(
-            f"SELECT {', '.join(self.table_columns)} FROM {self.table_name} WHERE id = %s", (id,)).fetchone()
-        return result if result else None
-        
-    def _update(self, id: int, **kwargs):
-        """Updates record with merged data from existing record"""
-        current_record = self._fetch(id)
-        if not current_record:
+        values = tuple(kwargs.get(col, None) for col in cls.table_columns)
+        result = cls.execute_query(query, values)
+        return cls.transform_record(result)
+
+    @classmethod
+    def get_record(cls, id: int) -> Optional[dict]:
+        """Fetch a single record by ID."""
+        query = f"SELECT {', '.join(cls.table_columns)} FROM {cls.table_name} WHERE id = %s"
+        result = cls.execute_query(query, (id,))
+        return cls.transform_record(result)
+
+    @classmethod
+    def get_all_records(cls) -> list[dict]:
+        """Fetch all records."""
+        query = f"SELECT {', '.join(cls.table_columns)} FROM {cls.table_name}"
+        results = cls.execute_query(query, fetch="all")
+        return [cls.transform_record(record) for record in results]
+
+    @classmethod
+    def update_record(cls, id: int, **kwargs) -> Optional[dict]:
+        """Update a record by ID."""
+        cols = [col for col in cls.table_columns if col in kwargs]
+        if not cols:
             return None
-        
-        # Convert current record to dict if needed
-        if not isinstance(current_record, dict):
-            current_record = dict(zip(self.table_columns, current_record))
-        
-        # Merge existing data with updates
-        merged_data = {**current_record, **kwargs}
-        
-        # Prepare update query
-        cols = []; values = []
-        for col, val in merged_data.items():
-            if col in self.table_columns:  # Only include defined columns
-                cols.append(col)
-                values.append(val)
-
-        query = f"""\
-            UPDATE {self.table_name} 
-               SET {', '.join([f'{k} = %s' for k in cols])}
-             WHERE id = {id}
-            RETURNING *"""  # Return updated record       
-        self.conn.execute(query, values)
-        self.conn.commit()
-        return self._fetch(id)  # Return fresh data
-    
-    def _delete(self, id: int):
-        """Deletes the current instance from the database"""
-        query = f"DELETE FROM {self.table_name} WHERE id = {id}"
-        self.cursor.execute(query)
-        self.conn.commit()
-        # self.conn.close()
-        return self
-
+        query = f"""
+            UPDATE {cls.table_name} 
+            SET {', '.join([f'{col} = %s' for col in cols])}
+            WHERE id = %s
+            RETURNING *"""
+        values = tuple(kwargs[col] for col in cols) + (id,)
+        result = cls.execute_query(query, values)
+        return cls.transform_record(result)
 
     @classmethod
-    def create_record(cls, **kwargs):
-        """Class method to create record without instantiation"""
-        instance = cls(**kwargs)
-        result = instance._create()
-        if result:
-            record_dict = {}
-            for i, col in enumerate(cls.table_columns):
-                record_dict[col] = result[i]
-            return record_dict
-        return None
-    
-    @classmethod
-    def get_record(cls, id: int):
-        """Class method to fetch a single record by id"""
-        instance = cls(
-            name="placeholder",
-            birthdate=datetime.now(),
-            age=0,
-            email="placeholder@example.com"
-        )
-        result = instance._fetch(id)
-        print(result)
-        if result:
-            record_dict = {}
-            for i, col in enumerate(cls.table_columns):
-                record_dict[col] = result[i]
-            return record_dict
-        return None
+    def delete_record(cls, id: int) -> bool:
+        """Delete a record by ID."""
+        query = f"DELETE FROM {cls.table_name} WHERE id = %s"
+        cls.execute_query(query, (id,), fetch=None)  # No fetching for DELETE
+        return True
 
     @classmethod
-    def get_all_records(cls):
-        """Class method to fetch all records"""
-        instance = cls(
-            name="placeholder",
-            birthdate=datetime.now(),
-            age=0,
-            email="placeholder@example.com"
-        )
-        results = instance.cursor.execute(
-            f"SELECT {', '.join(cls.table_columns)} FROM {cls.table_name}").fetchall()     
-
-        dict_records = []
-        for record in results:
-            record_dict = {}
-            for i, col in enumerate(cls.table_columns):
-                record_dict[col] = record[i]
-            dict_records.append(record_dict)
-        
-        return dict_records
-
-    @classmethod
-    def update_record(cls, id: int, **kwargs):
-        """Class method to update record without instantiation"""
-        instance = cls(
-            name="placeholder",  # minimal required fields
-            birthdate=datetime.now(),
-            age=0,
-            email="placeholder@example.com"
-        )
-        id = instance._update(id=id, **kwargs)
-        if not id:
-            return None
-        return id
-
-    @classmethod
-    def delete_record(cls, id: int):
-        """Class method to delete a record by id"""
-        instance = cls(
-            name="placeholder",
-            birthdate=datetime.now(),
-            age=0,
-            email="placeholder@example.com"
-        )
-        return instance._delete(id)
-
-
-    
-    
-    def filter(self, **kwargs):
-        """Filters records based on given criteria"""
-        query = f"SELECT * FROM {self.table_name} WHERE {' AND '.join([f'{k} = %s' for k in kwargs.keys()])}"
-        self.cursor.execute(query, tuple(kwargs.values()))
-        results = self.cursor.fetchall()
-        self.conn.close()
-        return results
-
-
-## Model defination for response
-class Response(BaseSchema):
-    Index: int
-
+    def filter_records(cls, **kwargs) -> list[dict]:
+        """Filter records based on criteria."""
+        conditions = " AND ".join([f"{col} = %s" for col in kwargs.keys()])
+        query = f"SELECT {', '.join(cls.table_columns)} FROM {cls.table_name} WHERE {conditions}"
+        results = cls.execute_query(query, tuple(kwargs.values()), fetch="all")
+        return [cls.transform_record(record) for record in results]

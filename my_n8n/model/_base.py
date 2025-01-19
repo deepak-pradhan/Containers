@@ -1,15 +1,25 @@
-# file : my_n8n/model/_base.py :: 0.0.1
+# file : my_n8n/model/_base.py :: 0.0.2
 
 import psycopg
+import sqlite3
 from pydantic import BaseModel, Field
-from typing import ClassVar, TypeVar
+from typing import TypeVar
+from loguru import logger as log
+from rich import print
 
 T = TypeVar("T", bound="_Base")
 class _Base(BaseModel):
-    conn: psycopg.Connection | None = None
-    table: str = Field(default='')
-    columns: ClassVar[tuple[str, ...]] = ()
-    
+    _conn_source: sqlite3.Connection | None = None  
+    _conn_target: psycopg.Connection | None = None  
+    columns: tuple = ()
+    columns = (
+        "date"
+        , "activity"
+        , "symbol"
+        , "quantity"
+        , "price"
+    )
+
     _sample ={}
     model_config = {
         "extra": "ignore",
@@ -20,13 +30,67 @@ class _Base(BaseModel):
     }    
 
     @property
-    def _conn(self) -> psycopg.Connection:
-        if not self.conn:
-            self.conn = psycopg.connect("host=localhost port=5433 dbname=postgres user=n8n_user password=n8n_password")
-        return self.conn
+    def _connect_source(self) -> sqlite3.Connection:
+        '''default source is sqlite3'''
+        if not self._conn_source:
+            self._conn_source = sqlite3.connect('source.db')  
+        return self._conn_source
+
+    @property
+    def _connect_target(self) -> psycopg.Connection:               
+        '''default target is postgres'''
+        if not self._conn_target:  
+            self._conn_target = psycopg.connect(
+                host='localhost',
+                port='5433',
+                dbname='postgres',
+                user='n8n_user',
+                password='n8n_password'
+            )
+        return self._conn_target 
+
+    @property
+    def _table_s(self) -> str:
+        return self.__class__.__name__.lower() + '_s'
     
     @property
-    def _table(self) -> str:
-        if not self.table:
-            self.table = self.__class__.__name__.lower()
-        return self.table
+    def _table_t(self) -> str:
+        return self.__class__.__name__.lower() + '_t'
+
+
+    # ###########################################################
+    def _inspect(cls) -> None:
+        '''self inspects'''
+        print(f"Source connected: {cls._connect_source}" if cls._connect_source else "source conn failed")
+        print(f"Sarget connected: {cls._connect_target}" if cls._connect_target else "target conn failed")
+        print('Source Table:', cls._table_s)
+        print('Target Table:', cls._table_t)
+        print(f'Columns: {cls.columns}')
+        print(f'Sample: {cls._sample}')
+        print(f'Model Config: {cls.model_config}')
+
+        print(f'\nModel:', cls, '\n')
+        print(f'\nModel dump json:', cls.model_dump_json())
+        print(f'\nModel json schema:', cls.model_json_schema())
+
+    # ###########################################################
+    def _auto_create_source_table(model: T) -> None:
+        cur = model._connect_source.cursor()
+        cur.execute(f'CREATE TABLE IF NOT EXISTS {model._table_s} ({", ".join(model.columns)})')
+        model._connect_source.commit()
+
+    def _auto_drop_source_table(model: T) -> None:
+        cur = model._connect_source.cursor()
+        cur.execute(f'DROP TABLE IF EXISTS {model._table_s}')
+        model._connect_source.commit()
+
+
+# Example Usage:
+if __name__ == "__main__":
+    m = _Base()
+    m._inspect()
+    con = m._connect_source
+    cur = con.cursor()
+
+    m._auto_create_source_table()
+    m._auto_drop_source_table()

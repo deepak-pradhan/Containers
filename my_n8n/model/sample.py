@@ -6,30 +6,20 @@ from pydantic import EmailStr, field_validator
 from datetime import datetime
 
 class TestModel(BaseSchema):
-    name: str  # Fixed from 'namr' to 'name'
+    name: str  
     birthdate: datetime
     age: int
     email: EmailStr    
 
     table_name: ClassVar[str] = "test"
-    table_columns = ["name", "birthdate", "age", "email"
-            , "is_active", "created_at", "updated_at", "type"]
+    # @TODO: auto derive table columns from model
+    table_columns: ClassVar[tuple[str, ...]] = ("name", "birthdate", "age", "email",
+                                                "is_active", "created_at", "updated_at", "type")
 
-    # Add validation methods specific to TestModel
-    def validate_age(self) -> bool:
-        return 0 <= self.age <= 150
-    
-    @field_validator('email')
-    @classmethod
-    def validate_email(cls, v):
-        if not isinstance(v, str) or '@' not in v:
-            raise ValueError('Invalid email format')
-        return v
-    
     model_config = {
-        "extra": "ignore",  # Ignore extra fields
-        "populate_by_name": True,  # Allow field name population
-        "validate_assignment": True,  # Validate on assignment
+        "extra": "ignore",  
+        "populate_by_name": True,
+        "validate_assignment": True,
         "from_attributes":True,
         "json_schema_extra": {
             "examples": [
@@ -44,6 +34,19 @@ class TestModel(BaseSchema):
         ]}}
     
 
+    # Add validation methods specific to TestModel
+    def validate_age(self) -> bool:
+        return 0 <= self.age <= 150
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if not isinstance(v, str) or '@' not in v:
+            raise ValueError('Invalid email format')
+        return v    
+
+    # @TODO: Generate DCL from model, or re-use from dbt catalog
+    @classmethod
     def _create_table(self):
         ''' creates table if not exists, uses psycopg 3 '''
         self.conn.execute("""
@@ -63,6 +66,10 @@ class TestModel(BaseSchema):
 
 # Usage example:
 if __name__ == "__main__":
+
+    # Create table if not exists
+    model = TestModel
+    model._create_table()
     
     ## Create
     new_record = TestModel.create_record(
@@ -85,20 +92,17 @@ if __name__ == "__main__":
     record = TestModel.get_record(id=26)
     print("Read record:\n", record, "\n")
 
-   
     # Read all records
     all_records = TestModel.get_all_records()
     print("All records:\n", all_records, "\n")  
 
     ## Update
-    #  Direct update without instantiation
     updated_id = TestModel.update_record(
-        id=26,
+        id=1,
         name='John Ruff',
         age=32
     )
     print("Updated record:\n", updated_id, "\n")
-
 
     # Delete
     TestModel.delete_record(id=1)

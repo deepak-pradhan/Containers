@@ -12,8 +12,8 @@ class BaseSchema(BaseModel):
 
     conn: ClassVar[psycopg.Connection] = get_db_connection()
     cursor: ClassVar[psycopg.Cursor] = conn.cursor()
-    table_name: ClassVar[str] = Field(default=None, description="Name of the table", required=True)
-    table_columns: ClassVar[list[str]] = []
+    table_name: ClassVar[str] = None  # Define default directly
+    table_columns: ClassVar[tuple[str, ...]] = ()  # Use an immutable tuple
 
     type: str | None = Field(default=None, description="Type of the record/object")
     is_active: bool = True

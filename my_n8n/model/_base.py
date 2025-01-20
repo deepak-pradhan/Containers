@@ -12,13 +12,7 @@ class _Base(BaseModel):
     _conn_source: sqlite3.Connection | None = None  
     _conn_target: psycopg.Connection | None = None  
     columns: tuple = ()
-    columns = (
-        "date"
-        , "activity"
-        , "symbol"
-        , "quantity"
-        , "price"
-    )
+    columns = ()
 
     _sample ={}
     model_config = {
@@ -39,13 +33,10 @@ class _Base(BaseModel):
     @property
     def _connect_target(self) -> psycopg.Connection:               
         '''default target is postgres'''
+        '''@TODO: use env vars'''
         if not self._conn_target:  
             self._conn_target = psycopg.connect(
-                host='localhost',
-                port='5433',
-                dbname='postgres',
-                user='n8n_user',
-                password='n8n_password'
+                host='localhost', port='5433', dbname='postgres', user='n8n_user', password='n8n_password'
             )
         return self._conn_target 
 
@@ -72,25 +63,17 @@ class _Base(BaseModel):
         print(f'\nModel:', cls, '\n')
         print(f'\nModel dump json:', cls.model_dump_json())
         print(f'\nModel json schema:', cls.model_json_schema())
+        return None
 
     # ###########################################################
     def _auto_create_source_table(model: T) -> None:
         cur = model._connect_source.cursor()
         cur.execute(f'CREATE TABLE IF NOT EXISTS {model._table_s} ({", ".join(model.columns)})')
         model._connect_source.commit()
+        return True
 
     def _auto_drop_source_table(model: T) -> None:
         cur = model._connect_source.cursor()
         cur.execute(f'DROP TABLE IF EXISTS {model._table_s}')
         model._connect_source.commit()
-
-
-# Example Usage:
-if __name__ == "__main__":
-    m = _Base()
-    m._inspect()
-    con = m._connect_source
-    cur = con.cursor()
-
-    m._auto_create_source_table()
-    m._auto_drop_source_table()
+        return True

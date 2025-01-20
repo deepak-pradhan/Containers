@@ -1,4 +1,4 @@
-# file: my_n8n/model/base.py :: 0.0.3
+# file: my_n8n/model/base.py :: 0.0.4
 import sys
 sys.path.append("./../")
 
@@ -35,8 +35,13 @@ class Base(_Base):
 
     model_config = {
         **_Base.model_config,
-        "json_schema_extra": {f"sample": [_sample]},
+        "json_schema_extra": {"sample": [_sample]},
     }
+
+    def to_dict(self, exclude_fields=None):
+        """Convert model to dict with optional exclusions."""
+        exclude_fields = exclude_fields or {"id2", "created_at", "updated_at"}
+        return self.dict(exclude=exclude_fields)
 
     ## Methods
     @classmethod
@@ -70,9 +75,14 @@ if __name__ == "__main__":
     cur = con.cursor()
     
     # Create & drop test
-    m._auto_create_app_table(m)
     m._auto_drop_app_table(m)
     m._auto_create_app_table(m)
+
+    m._auto_drop_source_table(m)
+    m._auto_create_source_table(m)
+    
+    # ? m._auto_drop_target_table()
+    m._auto_create_target_table()
 
     ## s1: cur.execute(q, data)
     q = f'INSERT INTO {m._table} VALUES (?,?,?)'
@@ -80,7 +90,7 @@ if __name__ == "__main__":
     cur.execute(q, data)
     con.commit()
 
-    ## s2: create(table, columns, data)
+    # ## s2: create(table, columns, data)
     data = {
         "is_active": True,
         "created_at": "2024-05-18T00:00:00",

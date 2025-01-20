@@ -8,13 +8,13 @@ class DBConnections:
     app = sqlite3.connect("app.db")
 
 class SourceDBConnection:
-    conn = sqlite3.connect("source.db")
+    con = sqlite3.connect("source.db")
 
 class TargetDBConnection:
-    conn = psycopg.connect("host=localhost port=5433 dbname=postgres user=n8n_user password=n8n_password")
+    con = psycopg.connect("host=localhost port=5433 dbname=postgres user=n8n_user password=n8n_password")
 
 class AppDBConnection:
-    conn = sqlite3.connect("app.db")
+    con = sqlite3.connect("app.db")
 
 def get_db_app():
     return DBConnections.app

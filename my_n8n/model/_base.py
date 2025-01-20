@@ -1,18 +1,18 @@
-# file : my_n8n/model/_base.py :: 0.0.2
+# file : my_n8n/model/_base.py :: 0.0.3
+# - removed connection objects from serialization from property
 
-import psycopg
-import sqlite3
+import sys
+sys.path.append("./../")
 from pydantic import BaseModel
-from typing import TypeVar
+from typing import TypeVar, ClassVar, Tuple
 from rich import print
+from loguru import logger as log
+from my_n8n.connection.db_my_n8n import get_db_app, get_db_source, get_db_target
 
 T = TypeVar("T", bound="_Base")
 class _Base(BaseModel):
-    _conn_source: sqlite3.Connection | None = None  
-    _conn_target: psycopg.Connection | None = None  
-    columns: tuple = ()
-    columns = ()
-
+    table_name: str = "base_s"
+    columns: ClassVar[Tuple[str, ...]] = ()
     _sample ={}
     model_config = {
         "extra": "ignore",
@@ -23,22 +23,9 @@ class _Base(BaseModel):
     }    
 
     @property
-    def _connect_source(self) -> sqlite3.Connection:
-        '''default source is sqlite3'''
-        if not self._conn_source:
-            self._conn_source = sqlite3.connect('source.db')  
-        return self._conn_source
-
-    @property
-    def _connect_target(self) -> psycopg.Connection:               
-        '''default target is postgres'''
-        '''@TODO: use env vars'''
-        if not self._conn_target:  
-            self._conn_target = psycopg.connect(
-                host='localhost', port='5433', dbname='postgres', user='n8n_user', password='n8n_password'
-            )
-        return self._conn_target 
-
+    def _table(self) -> str:
+        return self.table_name
+    
     @property
     def _table_s(self) -> str:
         return self.__class__.__name__.lower() + '_s'
@@ -47,36 +34,52 @@ class _Base(BaseModel):
     def _table_t(self) -> str:
         return self.__class__.__name__.lower() + '_t'
 
-
-    # ###########################################################
+    # ## Helpers
     def _inspect(cls) -> None:
-        '''self inspects'''
-        print(f"Source connected: {cls._connect_source}" if cls._connect_source else "source conn failed")
-        print(f"Sarget connected: {cls._connect_target}" if cls._connect_target else "target conn failed")
+        """self inspects"""
         print('Source Table:', cls._table_s)
         print('Target Table:', cls._table_t)
         print(f'Columns: {cls.columns}')
         print(f'Sample: {cls._sample}')
         print(f'Model Config: {cls.model_config}')
-
-        print('\nModel:', cls, '\n')
+        print('\nModel:', cls)
         print('\nModel dump json:', cls.model_dump_json())
-        print('\nModel json schema:', cls.model_json_schema())
-        return None
+        print('\nModeel json schema:', cls.model_json_schema())     
+    def _exec_app_dcl(self, query: str) -> None:
+        con = get_db_app()
+        cur = con.cursor()
+        cur.execute(query)
+        con.commit()
+    def _exec_source_dcl(self, query: str) -> None:
+        con = get_db_source()
+        cur = con.cursor()
+        cur.execute(query)
+        con.commit()
+    def _exec_target_dcl(self, query: str) -> None:
+        con = get_db_target()   
+        cur = con.cursor()
+        cur.execute(query)
+        con.commit()
+    def _auto_create_app_table(self, model: T) -> None:
+        q = f'CREATE TABLE IF NOT EXISTS {model.table_name} ({", ".join(model.columns)})'
+        self._exec_app_dcl(q)
+    def _auto_drop_app_table(self, model: T) -> None:
+        q = f'DROP TABLE IF EXISTS {model.table_name}'
+        self._exec_app_dcl(q)
+    def _auto_create_source_table(self, model: T) -> None:
+        q = f'CREATE TABLE IF NOT EXISTS {model._table_s} ({", ".join(model.columns)})'
+        self._exec_source_dcl(q)
+    def _auto_drop_source_table(self, model: T) -> None:
+        q = f'DROP TABLE IF EXISTS {model._table_s}'
+        self._exec_source_dcl(q)
+    def _auto_create_target_table(self, model: T) -> None:
+        q = f'CREATE TABLE IF NOT EXISTS {model._table_t} ({", ".join(model.columns)})'
+        self._exec_source_dcl(q)    
+    def _auto_drop_target_table(self, model: T) -> None:
+        q = f'DROP TABLE IF EXISTS {model._table_t}'
+        self._exec_source_dcl(q)
 
-    # ###########################################################
-    def _auto_create_source_table(model: T) -> None:
-        cur = model._connect_source.cursor()
-        cur.execute(f'CREATE TABLE IF NOT EXISTS {model._table_s} ({", ".join(model.columns)})')
-        model._connect_source.commit()
-        return True
-
-    def _auto_drop_source_table(model: T) -> None:
-        cur = model._connect_source.cursor()
-        cur.execute(f'DROP TABLE IF EXISTS {model._table_s}')
-        model._connect_source.commit()
-        return True
-# ###########################################################
+# ##
 if __name__ == "__main__":
     m = _Base()
     m._inspect()

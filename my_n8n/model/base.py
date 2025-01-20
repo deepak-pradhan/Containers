@@ -36,7 +36,6 @@ class Base(_Base):
     model_config = {
         **_Base.model_config,
         "json_schema_extra": {f"sample": [_sample]},
-        "exclude": {"_conn_source", "_conn_target"}  # Exclude connection objects from serialization
     }
 
     ## Methods

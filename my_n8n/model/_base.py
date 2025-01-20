@@ -76,3 +76,8 @@ class _Base(BaseModel):
         cur.execute(f'DROP TABLE IF EXISTS {model._table_s}')
         model._connect_source.commit()
         return True
+# ###########################################################
+if __name__ == "__main__":
+    m = _Base()
+    m._inspect()
+    pass

@@ -1,10 +1,11 @@
-# file : my_n8n/model/_base.py :: 0.0.3
+# file : my_n8n/model/base.py :: 0.0.3
 # basic CRUD operations
 
 import psycopg
 import sqlite3
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import TypeVar
+from loguru import logger as log
 from rich import print
 
 T = TypeVar("T", bound="_Base")
@@ -26,7 +27,7 @@ class _Base(BaseModel):
         "arbitrary_types_allowed": True,
         "populate_by_name": True,
         "validate_assignment": True,
-        "json_schema_extra": {"sample": [_sample]},
+        "json_schema_extra": {f"sample": [_sample]},
     }    
 
     @property
@@ -69,9 +70,9 @@ class _Base(BaseModel):
         print(f'Sample: {cls._sample}')
         print(f'Model Config: {cls.model_config}')
 
-        print('\nModel:', cls, '\n')
-        print('\nModel dump json:', cls.model_dump_json())
-        print('\nModel json schema:', cls.model_json_schema())
+        print(f'\nModel:', cls, '\n')
+        print(f'\nModel dump json:', cls.model_dump_json())
+        print(f'\nModel json schema:', cls.model_json_schema())
 
     # ###########################################################
     def _auto_create_source_table(model: T) -> None:
@@ -167,8 +168,3 @@ if __name__ == "__main__":
         pass   
     def _drop_target_table(model: T) -> None:
         pass
-
-
-
-
-
